@@ -17,13 +17,20 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
-        // Lucide Icons 簡化版本
+        // Google Sheets 設定
+        const GOOGLE_API_KEY = 'AIzaSyDouD4Ml7mKggSiv90yt1r3FfajjQGNwPQ';
+        const SPREADSHEET_ID = '1Ny9F1jH__6tIZEhHN-Lbt7zEDBdK3dJZRHfkpD4Aj80';
+        const SHEET_NAME = 'Sheet1';
+
         const Icon = ({ name, size = 20, className = "" }) => {
             const icons = {
                 Plane: "M3 12l3-3 7 7 6-6 3 3-9 9z M12 2l10 10-10 10L2 12z",
                 Plus: "M12 5v14m-7-7h14",
+                Upload: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12",
+                Download: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3",
+                RefreshCw: "M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2",
                 Trash2: "M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6",
                 Edit3: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
                 Save: "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z",
@@ -63,14 +70,12 @@
         ];
 
         function App() {
+            const fileInputRef = useRef(null);
             const [activeTab, setActiveTab] = useState('itinerary');
-            const [items, setItems] = useState(() => {
-                const saved = localStorage.getItem('trip-itinerary-v6');
-                return saved ? JSON.parse(saved) : [
-                    { id: '1', date: '2026-02-20', startTime: '23:35', content: '長榮航空 BR61', location: '桃園機場', amount: 35000, category: 'transport', isPaid: true, link: 'https://www.evaair.com', note: '航廈 T2,提早 3 小時抵達' },
-                    { id: '2', date: '2026-03-01', startTime: '08:30', content: 'Dachstein West 滑雪', location: '上特勞恩', amount: 2500, category: 'ski', isPaid: false, link: 'https://www.dachsteinwest.at', note: '租借雪具需攜帶護照' }
-                ];
-            });
+            const [items, setItems] = useState([]);
+            const [isSyncing, setIsSyncing] = useState(false);
+            const [lastSyncTime, setLastSyncTime] = useState(null);
+            const [syncError, setSyncError] = useState(null);
 
             const [totalBudget, setTotalBudget] = useState(() => {
                 const saved = localStorage.getItem('trip-total-budget');
@@ -81,16 +86,116 @@
             const [tempBudget, setTempBudget] = useState(totalBudget);
             const [isEditing, setIsEditing] = useState(false);
             const [editingItem, setEditingItem] = useState(null);
-            const [selectedDate, setSelectedDate] = useState(items[0]?.date || '2026-02-20');
+            const [selectedDate, setSelectedDate] = useState('2026-02-20');
 
             const [formData, setFormData] = useState({
                 date: '', startTime: '09:00', endTime: '', content: '', location: '',
                 amount: 0, category: 'sightseeing', isPaid: false, link: '', note: ''
             });
 
+            // 從 Google Sheets 讀取資料
+            const loadFromGoogleSheets = async () => {
+                setIsSyncing(true);
+                setSyncError(null);
+                
+                try {
+                    const range = `${SHEET_NAME}!A:J`;
+                    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${GOOGLE_API_KEY}`;
+                    
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    if (data.values && data.values.length > 1) {
+                        const headers = data.values[0];
+                        const rows = data.values.slice(1);
+                        
+                        const loadedItems = rows.map((row, index) => ({
+                            id: 'sheet_' + index,
+                            date: row[0] || '',
+                            startTime: row[1] || '09:00',
+                            endTime: row[2] || '',
+                            content: row[3] || '',
+                            location: row[4] || '',
+                            amount: parseFloat(row[5]) || 0,
+                            category: row[6] || 'other',
+                            isPaid: row[7]?.toUpperCase() === 'TRUE',
+                            link: row[8] || '',
+                            note: row[9] || ''
+                        })).filter(item => item.date && item.content);
+                        
+                        setItems(loadedItems);
+                        setLastSyncTime(new Date());
+                        
+                        if (loadedItems.length > 0) {
+                            setSelectedDate(loadedItems[0].date);
+                        }
+                    }
+                } catch (error) {
+                    console.error('讀取失敗:', error);
+                    setSyncError('讀取失敗: ' + error.message);
+                } finally {
+                    setIsSyncing(false);
+                }
+            };
+
+            // 寫入到 Google Sheets
+            const saveToGoogleSheets = async (updatedItems) => {
+                setIsSyncing(true);
+                setSyncError(null);
+                
+                try {
+                    const headers = ['date', 'startTime', 'endTime', 'content', 'location', 'amount', 'category', 'isPaid', 'link', 'note'];
+                    const values = [
+                        headers,
+                        ...updatedItems.map(item => [
+                            item.date,
+                            item.startTime,
+                            item.endTime || '',
+                            item.content,
+                            item.location || '',
+                            item.amount,
+                            item.category,
+                            item.isPaid ? 'TRUE' : 'FALSE',
+                            item.link || '',
+                            item.note || ''
+                        ])
+                    ];
+                    
+                    const range = `${SHEET_NAME}!A1:J${values.length}`;
+                    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?valueInputOption=RAW&key=${GOOGLE_API_KEY}`;
+                    
+                    const response = await fetch(url, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ values })
+                    });
+                    
+                    if (response.ok) {
+                        setLastSyncTime(new Date());
+                    } else {
+                        throw new Error('寫入失敗');
+                    }
+                } catch (error) {
+                    console.error('同步失敗:', error);
+                    setSyncError('同步失敗: ' + error.message);
+                } finally {
+                    setIsSyncing(false);
+                }
+            };
+
+            // 初始載入
             useEffect(() => {
-                localStorage.setItem('trip-itinerary-v6', JSON.stringify(items));
-            }, [items]);
+                loadFromGoogleSheets();
+            }, []);
+
+            // 自動同步 (每 30 秒)
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    loadFromGoogleSheets();
+                }, 30000);
+                
+                return () => clearInterval(interval);
+            }, []);
 
             useEffect(() => {
                 localStorage.setItem('trip-total-budget', totalBudget.toString());
@@ -132,32 +237,128 @@
                 setIsEditing(true);
             };
 
-            const handleSave = () => {
+            const handleSave = async () => {
                 if (!formData.date || !formData.startTime || !formData.content) {
                     alert('請填寫日期、時間和內容名稱');
                     return;
                 }
 
                 const newItem = {
-                    id: editingItem?.id || Date.now().toString(),
+                    id: editingItem?.id || 'new_' + Date.now().toString(),
                     ...formData,
                     amount: parseFloat(formData.amount) || 0
                 };
 
+                let updatedItems;
                 if (editingItem) {
-                    setItems(items.map(i => i.id === editingItem.id ? newItem : i));
+                    updatedItems = items.map(i => i.id === editingItem.id ? newItem : i);
                 } else {
-                    setItems([...items, newItem]);
+                    updatedItems = [...items, newItem];
                 }
+                
+                setItems(updatedItems);
                 setIsEditing(false);
                 setSelectedDate(newItem.date);
+                
+                // 同步到 Google Sheets
+                await saveToGoogleSheets(updatedItems);
+            };
+
+            const handleDelete = async (itemId) => {
+                if (!confirm('確定刪除這個行程嗎？')) return;
+                
+                const updatedItems = items.filter(i => i.id !== itemId);
+                setItems(updatedItems);
+                
+                // 同步到 Google Sheets
+                await saveToGoogleSheets(updatedItems);
+            };
+
+            const handleImportCSV = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const text = e.target.result;
+                        const lines = text.split('\n');
+                        
+                        const newItems = [];
+                        for (let i = 1; i < lines.length; i++) {
+                            const line = lines[i].trim();
+                            if (!line) continue;
+                            
+                            const values = line.split(',');
+                            const item = {
+                                id: 'csv_' + Date.now().toString() + i,
+                                date: values[0]?.trim() || '',
+                                startTime: values[1]?.trim() || '09:00',
+                                endTime: values[2]?.trim() || '',
+                                content: values[3]?.trim() || '',
+                                location: values[4]?.trim() || '',
+                                amount: parseFloat(values[5]) || 0,
+                                category: values[6]?.trim() || 'other',
+                                isPaid: values[7]?.trim().toUpperCase() === 'TRUE',
+                                link: values[8]?.trim() || '',
+                                note: values[9]?.trim() || ''
+                            };
+                            
+                            if (item.date && item.content) {
+                                newItems.push(item);
+                            }
+                        }
+                        
+                        if (newItems.length > 0) {
+                            const updatedItems = [...items, ...newItems];
+                            setItems(updatedItems);
+                            await saveToGoogleSheets(updatedItems);
+                            alert('成功匯入 ' + newItems.length + ' 筆行程！');
+                        } else {
+                            alert('找不到有效的行程資料');
+                        }
+                    } catch (error) {
+                        alert('匯入失敗，請確認檔案格式正確');
+                        console.error(error);
+                    }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            };
+
+            const handleExportCSV = () => {
+                const headers = ['date', 'startTime', 'endTime', 'content', 'location', 'amount', 'category', 'isPaid', 'link', 'note'];
+                const csvLines = [headers.join(',')];
+                
+                items.forEach(item => {
+                    const row = [
+                        item.date,
+                        item.startTime,
+                        item.endTime || '',
+                        item.content,
+                        item.location,
+                        item.amount,
+                        item.category,
+                        item.isPaid ? 'TRUE' : 'FALSE',
+                        item.link || '',
+                        item.note || ''
+                    ];
+                    csvLines.push(row.join(','));
+                });
+                
+                const csvContent = csvLines.join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = '旅遊行程_' + new Date().toISOString().split('T')[0] + '.csv';
+                link.click();
             };
 
             return (
                 <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-32">
                     <header className="bg-white border-b sticky top-0 z-40 px-4 py-5 shadow-sm">
                         <div className="max-w-xl mx-auto">
-                            <div className="flex justify-between items-center mb-5">
+                            <div className="flex justify-between items-center mb-3">
                                 <div className="flex items-center gap-3">
                                     <div className="bg-blue-600 p-2.5 rounded-2xl text-white shadow-lg">
                                         <Icon name="Plane" size={24} />
@@ -167,9 +368,63 @@
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Travel Management</p>
                                     </div>
                                 </div>
-                                <button onClick={() => handleOpenEdit()} className="bg-slate-900 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg">
-                                    <Icon name="Plus" size={20} />
-                                </button>
+                                <div className="flex gap-2">
+                                    <input 
+                                        ref={fileInputRef}
+                                        type="file" 
+                                        accept=".csv" 
+                                        onChange={handleImportCSV}
+                                        style={{display: 'none'}}
+                                    />
+                                    <button 
+                                        onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                                        className="bg-emerald-600 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
+                                        title="匯入 CSV"
+                                    >
+                                        <Icon name="Upload" size={18} />
+                                    </button>
+                                    <button 
+                                        onClick={handleExportCSV}
+                                        className="bg-indigo-600 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
+                                        title="匯出 CSV"
+                                    >
+                                        <Icon name="Download" size={18} />
+                                    </button>
+                                    <button 
+                                        onClick={loadFromGoogleSheets}
+                                        disabled={isSyncing}
+                                        className={`${isSyncing ? 'bg-gray-400' : 'bg-purple-600'} text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg`}
+                                        title="手動同步"
+                                    >
+                                        <Icon name="RefreshCw" size={18} className={isSyncing ? 'animate-spin' : ''} />
+                                    </button>
+                                    <button 
+                                        onClick={() => handleOpenEdit()} 
+                                        className="bg-slate-900 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
+                                        title="新增行程"
+                                    >
+                                        <Icon name="Plus" size={18} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* 同步狀態 */}
+                            <div className="mb-3 flex items-center justify-between text-[10px]">
+                                <div className="flex items-center gap-2">
+                                    {isSyncing ? (
+                                        <span className="text-blue-500 font-bold flex items-center gap-1">
+                                            <Icon name="RefreshCw" size={12} className="animate-spin" /> 同步中...
+                                        </span>
+                                    ) : lastSyncTime ? (
+                                        <span className="text-green-600 font-bold flex items-center gap-1">
+                                            <Icon name="CheckCircle2" size={12} /> 已同步 {lastSyncTime.toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit'})}
+                                        </span>
+                                    ) : null}
+                                    {syncError && (
+                                        <span className="text-red-500 font-bold">⚠️ {syncError}</span>
+                                    )}
+                                </div>
+                                <span className="text-slate-400 font-bold">📊 共 {items.length} 筆行程</span>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -239,7 +494,7 @@
                                                                 <button onClick={() => handleOpenEdit(item)} className="text-slate-300 hover:text-blue-500 transition-colors">
                                                                     <Icon name="Edit3" size={14} />
                                                                 </button>
-                                                                <button onClick={() => { if(confirm('確定刪除這個行程嗎？')) setItems(items.filter(i => i.id !== item.id)); }} className="text-slate-300 hover:text-red-500 transition-colors">
+                                                                <button onClick={() => handleDelete(item.id)} className="text-slate-300 hover:text-red-500 transition-colors">
                                                                     <Icon name="Trash2" size={14} />
                                                                 </button>
                                                             </div>
@@ -247,7 +502,7 @@
                                                         <h3 className="font-bold text-slate-800 mb-1">{item.content}</h3>
                                                         {item.location && (
                                                             <a 
-                                                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location)}`}
+                                                                href={'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(item.location)}
                                                                 target="_blank"
                                                                 className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 mb-2 font-medium"
                                                             >
@@ -255,7 +510,7 @@
                                                             </a>
                                                         )}
                                                         {item.link && (
-                                                            <a href={item.link} target="_blank" className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg mb-3">
+                                                            <a href={item.link} target="_blank" className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg mb-3 hover:bg-blue-100 transition-colors">
                                                                 <Icon name="ExternalLink" size={10} /> 相關連結
                                                             </a>
                                                         )}
@@ -320,7 +575,7 @@
                             <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
                                 <div className="p-6 border-b flex justify-between items-center bg-slate-50">
                                     <h2 className="font-black text-lg">{editingItem ? '編輯行程' : '新增行程'}</h2>
-                                    <button onClick={() => setIsEditing(false)} className="p-2 hover:bg-slate-200 rounded-full">
+                                    <button onClick={() => setIsEditing(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
                                         <Icon name="X" size={20} />
                                     </button>
                                 </div>
@@ -368,7 +623,7 @@
 
                                     <div>
                                         <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">備註</label>
-                                        <textarea rows="3" placeholder="行程備註..." value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs font-bold resize-none" />
+                                        <textarea rows="3" placeholder="行程備註..." value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs font-bold resize-none"></textarea>
                                     </div>
 
                                     <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl">
@@ -376,8 +631,8 @@
                                         <label htmlFor="paid" className="text-xs font-bold text-slate-600 cursor-pointer">標記為已支付</label>
                                     </div>
 
-                                    <button onClick={handleSave} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2">
-                                        <Icon name="Save" size={18} /> 儲存行程
+                                    <button onClick={handleSave} disabled={isSyncing} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2">
+                                        <Icon name="Save" size={18} /> {isSyncing ? '同步中...' : '儲存行程'}
                                     </button>
                                 </div>
                             </div>
@@ -391,3 +646,4 @@
     </script>
 </body>
 </html>
+                                                
