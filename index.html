@@ -127,36 +127,30 @@
                 }
             };
 
-            // 寫入到 Google Sheets
+            // 寫入到 Google Sheets (優化版 - 更快速)
             const saveToGoogleSheets = async (updatedItems) => {
-                setIsSyncing(true);
+                // 不顯示同步中狀態,完全背景執行
                 setSyncError(null);
                 
                 try {
                     // 立即更新本地狀態
                     setItems(updatedItems);
                     
-                    // 背景同步到 Google Sheets
+                    // 完全背景同步,不阻塞 UI
                     fetch(APPS_SCRIPT_URL, {
                         method: 'POST',
                         mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ items: updatedItems })
                     }).then(() => {
-                        // 500ms 後重新載入確認
-                        setTimeout(() => {
-                            setIsSyncing(false);
-                            setLastSyncTime(new Date());
-                        }, 500);
+                        setLastSyncTime(new Date());
                     }).catch(err => {
-                        console.error('同步錯誤:', err);
-                        setIsSyncing(false);
+                        console.error('背景同步錯誤:', err);
                     });
                     
                 } catch (error) {
                     console.error('同步失敗:', error);
-                    setSyncError('同步失敗: ' + error.message);
-                    setIsSyncing(false);
+                    setSyncError('同步失敗');
                 }
             };
 
@@ -223,7 +217,7 @@
                 setIsEditing(true);
             };
 
-            const handleSave = async () => {
+            const handleSave = () => {
                 if (!formData.date || !formData.startTime || !formData.content) {
                     alert('請填寫日期、時間和內容名稱');
                     return;
@@ -250,22 +244,24 @@
                     updatedItems = [...items, newItem];
                 }
                 
-                // 立即關閉表單並更新畫面
+                // 立即關閉表單並更新畫面 (不等待)
                 setIsEditing(false);
                 setSelectedDate(newItem.date);
                 
-                // 背景同步到 Google Sheets
-                await saveToGoogleSheets(updatedItems);
+                // 完全背景同步
+                saveToGoogleSheets(updatedItems);
             };
 
-            const handleDelete = async (itemId) => {
+            const handleDelete = (itemId) => {
                 if (!confirm('確定刪除這個行程嗎？')) return;
                 
                 const updatedItems = items.filter(i => i.id !== itemId);
+                
+                // 立即更新畫面 (不等待)
                 setItems(updatedItems);
                 
-                // 同步到 Google Sheets
-                await saveToGoogleSheets(updatedItems);
+                // 完全背景同步
+                saveToGoogleSheets(updatedItems);
             };
 
             const handleImportCSV = (event) => {
@@ -305,9 +301,13 @@
                         
                         if (newItems.length > 0) {
                             const updatedItems = [...items, ...newItems];
+                            
+                            // 立即更新畫面
                             setItems(updatedItems);
-                            await saveToGoogleSheets(updatedItems);
                             alert('成功匯入 ' + newItems.length + ' 筆行程！');
+                            
+                            // 背景同步
+                            saveToGoogleSheets(updatedItems);
                         } else {
                             alert('找不到有效的行程資料');
                         }
@@ -383,7 +383,6 @@
                                         onClick={() => fileInputRef.current && fileInputRef.current.click()}
                                         className="bg-emerald-600 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
                                         title="匯入 CSV"
-                                        disabled={isSyncing}
                                     >
                                         <Icon name="Upload" size={18} />
                                     </button>
@@ -406,7 +405,6 @@
                                         onClick={() => handleOpenEdit()} 
                                         className="bg-slate-900 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
                                         title="新增行程"
-                                        disabled={isSyncing}
                                     >
                                         <Icon name="Plus" size={18} />
                                     </button>
@@ -418,18 +416,18 @@
                                 <div className="flex items-center gap-2">
                                     {isSyncing ? (
                                         <span className="text-blue-500 font-bold flex items-center gap-1">
-                                            <Icon name="RefreshCw" size={12} className="animate-spin" /> 雙向同步中...
+                                            <Icon name="RefreshCw" size={12} className="animate-spin" /> 同步中
                                         </span>
                                     ) : lastSyncTime ? (
                                         <span className="text-green-600 font-bold flex items-center gap-1">
-                                            <Icon name="CheckCircle2" size={12} /> ✨ 雙向同步 {lastSyncTime.toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit'})}
+                                            <Icon name="CheckCircle2" size={12} /> 已同步 {lastSyncTime.toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit'})}
                                         </span>
                                     ) : null}
                                     {syncError && (
                                         <span className="text-red-500 font-bold text-[9px]">⚠️ {syncError}</span>
                                     )}
                                 </div>
-                                <span className="text-slate-400 font-bold">📊 共 {items.length} 筆行程</span>
+                                <span className="text-slate-400 font-bold">📊 {items.length} 筆行程</span>
                             </div>
 
                             {/* 預算卡片 */}
@@ -505,14 +503,12 @@
                                                                 <button 
                                                                     onClick={() => handleOpenEdit(item)} 
                                                                     className="text-slate-300 hover:text-blue-500 transition-colors"
-                                                                    disabled={isSyncing}
                                                                 >
                                                                     <Icon name="Edit3" size={14} />
                                                                 </button>
                                                                 <button 
                                                                     onClick={() => handleDelete(item.id)} 
                                                                     className="text-slate-300 hover:text-red-500 transition-colors"
-                                                                    disabled={isSyncing}
                                                                 >
                                                                     <Icon name="Trash2" size={14} />
                                                                 </button>
@@ -653,8 +649,11 @@
                                         <label htmlFor="paid" className="text-xs font-bold text-slate-600 cursor-pointer">標記為已支付</label>
                                     </div>
 
-                                    <button onClick={handleSave} disabled={isSyncing} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2">
-                                        <Icon name="Save" size={18} /> {isSyncing ? '同步中...' : '儲存並同步'}
+                                    <button 
+                                        onClick={handleSave}
+                                        className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <Icon name="Save" size={18} /> 儲存行程
                                     </button>
                                 </div>
                             </div>
