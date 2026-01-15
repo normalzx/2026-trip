@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2026 中歐旅遊管理系統</title>
+    <title>2026 中歐旅遊管理系統 V15</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -19,11 +19,11 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // Google Sheets 設定
-        const GOOGLE_API_KEY = 'AIzaSyDouD4Ml7mKggSiv90yt1r3FfajjQGNwPQ';
-        const SPREADSHEET_ID = '1Ny9F1jH__6tIZEhHN-Lbt7zEDBdK3dJZRHfkpD4Aj80';
-        const SHEET_NAME = 'Sheet1';
+        // ============ 設定區 ============
+        // Google Apps Script 部署網址 (請替換成你的)
+        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyF6XS8S61Baw6DQsj8jGOtgmr5rXZv92mk6INS7uRxP-5bi_FqGqziA9gpr6WZjaG6ng/exec';
 
+        // ============ Icon 組件 ============
         const Icon = ({ name, size = 20, className = "" }) => {
             const icons = {
                 Plane: "M3 12l3-3 7 7 6-6 3 3-9 9z M12 2l10 10-10 10L2 12z",
@@ -59,6 +59,7 @@
             );
         };
 
+        // ============ 類別定義 ============
         const CATEGORIES = [
             { id: 'transport', label: '交通', icon: 'Plane', color: 'bg-blue-500' },
             { id: 'accommodation', label: '住宿', icon: 'CreditCard', color: 'bg-indigo-500' },
@@ -69,66 +70,54 @@
             { id: 'other', label: '其他', icon: 'Info', color: 'bg-slate-500' },
         ];
 
+        // ============ 主應用程式 ============
         function App() {
             const fileInputRef = useRef(null);
+            
+            // 狀態管理
             const [activeTab, setActiveTab] = useState('itinerary');
             const [items, setItems] = useState([]);
             const [isSyncing, setIsSyncing] = useState(false);
             const [lastSyncTime, setLastSyncTime] = useState(null);
             const [syncError, setSyncError] = useState(null);
+            const [selectedDate, setSelectedDate] = useState('2026-02-20');
 
+            // 預算管理
             const [totalBudget, setTotalBudget] = useState(() => {
                 const saved = localStorage.getItem('trip-total-budget');
                 return saved ? parseFloat(saved) : 150000;
             });
-
             const [isEditingBudget, setIsEditingBudget] = useState(false);
             const [tempBudget, setTempBudget] = useState(totalBudget);
+
+            // 編輯表單
             const [isEditing, setIsEditing] = useState(false);
             const [editingItem, setEditingItem] = useState(null);
-            const [selectedDate, setSelectedDate] = useState('2026-02-20');
-
             const [formData, setFormData] = useState({
                 date: '', startTime: '09:00', endTime: '', content: '', location: '',
                 amount: 0, category: 'sightseeing', isPaid: false, link: '', note: ''
             });
 
+            // ============ Google Sheets 同步函數 ============
+            
             // 從 Google Sheets 讀取資料
             const loadFromGoogleSheets = async () => {
                 setIsSyncing(true);
                 setSyncError(null);
                 
                 try {
-                    const range = `${SHEET_NAME}!A:J`;
-                    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?key=${GOOGLE_API_KEY}`;
+                    const response = await fetch(APPS_SCRIPT_URL + '?t=' + Date.now());
+                    const result = await response.json();
                     
-                    const response = await fetch(url);
-                    const data = await response.json();
-                    
-                    if (data.values && data.values.length > 1) {
-                        const headers = data.values[0];
-                        const rows = data.values.slice(1);
-                        
-                        const loadedItems = rows.map((row, index) => ({
-                            id: 'sheet_' + index,
-                            date: row[0] || '',
-                            startTime: row[1] || '09:00',
-                            endTime: row[2] || '',
-                            content: row[3] || '',
-                            location: row[4] || '',
-                            amount: parseFloat(row[5]) || 0,
-                            category: row[6] || 'other',
-                            isPaid: row[7]?.toUpperCase() === 'TRUE',
-                            link: row[8] || '',
-                            note: row[9] || ''
-                        })).filter(item => item.date && item.content);
-                        
-                        setItems(loadedItems);
+                    if (result.success) {
+                        setItems(result.data || []);
                         setLastSyncTime(new Date());
                         
-                        if (loadedItems.length > 0) {
-                            setSelectedDate(loadedItems[0].date);
+                        if (result.data && result.data.length > 0 && !items.length) {
+                            setSelectedDate(result.data[0].date);
                         }
+                    } else {
+                        throw new Error(result.error || '讀取失敗');
                     }
                 } catch (error) {
                     console.error('讀取失敗:', error);
@@ -144,45 +133,35 @@
                 setSyncError(null);
                 
                 try {
-                    const headers = ['date', 'startTime', 'endTime', 'content', 'location', 'amount', 'category', 'isPaid', 'link', 'note'];
-                    const values = [
-                        headers,
-                        ...updatedItems.map(item => [
-                            item.date,
-                            item.startTime,
-                            item.endTime || '',
-                            item.content,
-                            item.location || '',
-                            item.amount,
-                            item.category,
-                            item.isPaid ? 'TRUE' : 'FALSE',
-                            item.link || '',
-                            item.note || ''
-                        ])
-                    ];
+                    // 立即更新本地狀態
+                    setItems(updatedItems);
                     
-                    const range = `${SHEET_NAME}!A1:J${values.length}`;
-                    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SPREADSHEET_ID}/values/${range}?valueInputOption=RAW&key=${GOOGLE_API_KEY}`;
-                    
-                    const response = await fetch(url, {
-                        method: 'PUT',
+                    // 背景同步到 Google Sheets
+                    fetch(APPS_SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ values })
+                        body: JSON.stringify({ items: updatedItems })
+                    }).then(() => {
+                        // 500ms 後重新載入確認
+                        setTimeout(() => {
+                            setIsSyncing(false);
+                            setLastSyncTime(new Date());
+                        }, 500);
+                    }).catch(err => {
+                        console.error('同步錯誤:', err);
+                        setIsSyncing(false);
                     });
                     
-                    if (response.ok) {
-                        setLastSyncTime(new Date());
-                    } else {
-                        throw new Error('寫入失敗');
-                    }
                 } catch (error) {
                     console.error('同步失敗:', error);
                     setSyncError('同步失敗: ' + error.message);
-                } finally {
                     setIsSyncing(false);
                 }
             };
 
+            // ============ 生命週期 ============
+            
             // 初始載入
             useEffect(() => {
                 loadFromGoogleSheets();
@@ -191,16 +170,21 @@
             // 自動同步 (每 30 秒)
             useEffect(() => {
                 const interval = setInterval(() => {
-                    loadFromGoogleSheets();
+                    if (!isSyncing) {
+                        loadFromGoogleSheets();
+                    }
                 }, 30000);
                 
                 return () => clearInterval(interval);
-            }, []);
+            }, [isSyncing]);
 
+            // 儲存預算到 localStorage
             useEffect(() => {
                 localStorage.setItem('trip-total-budget', totalBudget.toString());
             }, [totalBudget]);
 
+            // ============ 計算屬性 ============
+            
             const sortedDates = useMemo(() => {
                 return Array.from(new Set(items.map(i => i.date))).sort();
             }, [items]);
@@ -223,6 +207,8 @@
                 return Math.min((stats.expenseTotal / totalBudget) * 100, 100);
             }, [stats.expenseTotal, totalBudget]);
 
+            // ============ 事件處理 ============
+            
             const handleOpenEdit = (item = null) => {
                 if (item) {
                     setEditingItem(item);
@@ -244,9 +230,17 @@
                 }
 
                 const newItem = {
-                    id: editingItem?.id || 'new_' + Date.now().toString(),
-                    ...formData,
-                    amount: parseFloat(formData.amount) || 0
+                    id: editingItem?.id || 'item_' + Date.now().toString(),
+                    date: formData.date,
+                    startTime: formData.startTime,
+                    endTime: formData.endTime || '',
+                    content: formData.content,
+                    location: formData.location || '',
+                    amount: parseFloat(formData.amount) || 0,
+                    category: formData.category,
+                    isPaid: formData.isPaid,
+                    link: formData.link || '',
+                    note: formData.note || ''
                 };
 
                 let updatedItems;
@@ -256,11 +250,11 @@
                     updatedItems = [...items, newItem];
                 }
                 
-                setItems(updatedItems);
+                // 立即關閉表單並更新畫面
                 setIsEditing(false);
                 setSelectedDate(newItem.date);
                 
-                // 同步到 Google Sheets
+                // 背景同步到 Google Sheets
                 await saveToGoogleSheets(updatedItems);
             };
 
@@ -336,7 +330,7 @@
                         item.startTime,
                         item.endTime || '',
                         item.content,
-                        item.location,
+                        item.location || '',
                         item.amount,
                         item.category,
                         item.isPaid ? 'TRUE' : 'FALSE',
@@ -354,8 +348,15 @@
                 link.click();
             };
 
+            const handleSaveBudget = () => {
+                setTotalBudget(parseFloat(tempBudget) || 0);
+                setIsEditingBudget(false);
+            };
+
+            // ============ 渲染 ============
             return (
                 <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-32">
+                    {/* 頂部標題列 */}
                     <header className="bg-white border-b sticky top-0 z-40 px-4 py-5 shadow-sm">
                         <div className="max-w-xl mx-auto">
                             <div className="flex justify-between items-center mb-3">
@@ -365,9 +366,11 @@
                                     </div>
                                     <div>
                                         <h1 className="font-black text-xl tracking-tight">2026 Central Europe</h1>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Travel Management</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Travel Management V15</p>
                                     </div>
                                 </div>
+                                
+                                {/* 功能按鈕 */}
                                 <div className="flex gap-2">
                                     <input 
                                         ref={fileInputRef}
@@ -380,6 +383,7 @@
                                         onClick={() => fileInputRef.current && fileInputRef.current.click()}
                                         className="bg-emerald-600 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
                                         title="匯入 CSV"
+                                        disabled={isSyncing}
                                     >
                                         <Icon name="Upload" size={18} />
                                     </button>
@@ -402,31 +406,33 @@
                                         onClick={() => handleOpenEdit()} 
                                         className="bg-slate-900 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
                                         title="新增行程"
+                                        disabled={isSyncing}
                                     >
                                         <Icon name="Plus" size={18} />
                                     </button>
                                 </div>
                             </div>
 
-                            {/* 同步狀態 */}
+                            {/* 同步狀態列 */}
                             <div className="mb-3 flex items-center justify-between text-[10px]">
                                 <div className="flex items-center gap-2">
                                     {isSyncing ? (
                                         <span className="text-blue-500 font-bold flex items-center gap-1">
-                                            <Icon name="RefreshCw" size={12} className="animate-spin" /> 同步中...
+                                            <Icon name="RefreshCw" size={12} className="animate-spin" /> 雙向同步中...
                                         </span>
                                     ) : lastSyncTime ? (
                                         <span className="text-green-600 font-bold flex items-center gap-1">
-                                            <Icon name="CheckCircle2" size={12} /> 已同步 {lastSyncTime.toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit'})}
+                                            <Icon name="CheckCircle2" size={12} /> ✨ 雙向同步 {lastSyncTime.toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit'})}
                                         </span>
                                     ) : null}
                                     {syncError && (
-                                        <span className="text-red-500 font-bold">⚠️ {syncError}</span>
+                                        <span className="text-red-500 font-bold text-[9px]">⚠️ {syncError}</span>
                                     )}
                                 </div>
                                 <span className="text-slate-400 font-bold">📊 共 {items.length} 筆行程</span>
                             </div>
 
+                            {/* 預算卡片 */}
                             <div className="grid grid-cols-2 gap-4 mb-4">
                                 <div className={`p-3 rounded-2xl border transition-all cursor-pointer ${isEditingBudget ? 'bg-white border-blue-500 ring-2 ring-blue-100' : 'bg-slate-50 border-slate-100'}`}
                                      onClick={() => { if(!isEditingBudget) { setTempBudget(totalBudget); setIsEditingBudget(true); }}}>
@@ -436,7 +442,8 @@
                                             <span className="font-black text-lg text-blue-600">$</span>
                                             <input autoFocus type="number" value={tempBudget} 
                                                    onChange={e => setTempBudget(e.target.value)}
-                                                   onBlur={() => { setTotalBudget(parseFloat(tempBudget) || 0); setIsEditingBudget(false); }}
+                                                   onBlur={handleSaveBudget}
+                                                   onKeyDown={e => e.key === 'Enter' && handleSaveBudget()}
                                                    className="w-full bg-transparent border-none p-0 font-black text-lg text-blue-600" />
                                         </div>
                                     ) : (
@@ -449,6 +456,7 @@
                                 </div>
                             </div>
 
+                            {/* 預算進度條 */}
                             <div className="relative w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-1">
                                 <div className={`h-full transition-all duration-700 ${budgetProgress > 90 ? 'bg-red-500' : 'bg-blue-500'}`} style={{width: `${budgetProgress}%`}} />
                             </div>
@@ -459,9 +467,11 @@
                         </div>
                     </header>
 
+                    {/* 主內容區 */}
                     <main className="max-w-xl mx-auto p-4">
                         {activeTab === 'itinerary' ? (
                             <div className="space-y-6">
+                                {/* 日期選擇器 */}
                                 <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
                                     {sortedDates.map(d => (
                                         <button key={d} onClick={() => setSelectedDate(d)}
@@ -475,6 +485,7 @@
                                     ))}
                                 </div>
 
+                                {/* 行程卡片列表 */}
                                 <div className="space-y-4">
                                     {filteredItems.map(item => {
                                         const category = CATEGORIES.find(c => c.id === item.category);
@@ -491,10 +502,18 @@
                                                                 <span className="text-[10px] font-black text-slate-600">{item.startTime}</span>
                                                             </div>
                                                             <div className="flex gap-2">
-                                                                <button onClick={() => handleOpenEdit(item)} className="text-slate-300 hover:text-blue-500 transition-colors">
+                                                                <button 
+                                                                    onClick={() => handleOpenEdit(item)} 
+                                                                    className="text-slate-300 hover:text-blue-500 transition-colors"
+                                                                    disabled={isSyncing}
+                                                                >
                                                                     <Icon name="Edit3" size={14} />
                                                                 </button>
-                                                                <button onClick={() => handleDelete(item.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                                                                <button 
+                                                                    onClick={() => handleDelete(item.id)} 
+                                                                    className="text-slate-300 hover:text-red-500 transition-colors"
+                                                                    disabled={isSyncing}
+                                                                >
                                                                     <Icon name="Trash2" size={14} />
                                                                 </button>
                                                             </div>
@@ -504,13 +523,14 @@
                                                             <a 
                                                                 href={'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(item.location)}
                                                                 target="_blank"
+                                                                rel="noopener noreferrer"
                                                                 className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 mb-2 font-medium"
                                                             >
                                                                 <Icon name="MapPin" size={12} /> {item.location}
                                                             </a>
                                                         )}
                                                         {item.link && (
-                                                            <a href={item.link} target="_blank" className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg mb-3 hover:bg-blue-100 transition-colors">
+                                                            <a href={item.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg mb-3 hover:bg-blue-100 transition-colors">
                                                                 <Icon name="ExternalLink" size={10} /> 相關連結
                                                             </a>
                                                         )}
@@ -557,6 +577,7 @@
                         )}
                     </main>
 
+                    {/* 底部導覽列 */}
                     <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t px-8 py-4 z-50 shadow-lg">
                         <div className="max-w-xl mx-auto flex justify-between">
                             <button onClick={() => setActiveTab('itinerary')} className={`flex flex-col items-center gap-1 ${activeTab === 'itinerary' ? 'text-blue-600' : 'text-slate-400'}`}>
@@ -570,6 +591,7 @@
                         </div>
                     </nav>
 
+                    {/* 編輯表單 Modal */}
                     {isEditing && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                             <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
@@ -632,7 +654,7 @@
                                     </div>
 
                                     <button onClick={handleSave} disabled={isSyncing} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2">
-                                        <Icon name="Save" size={18} /> {isSyncing ? '同步中...' : '儲存行程'}
+                                        <Icon name="Save" size={18} /> {isSyncing ? '同步中...' : '儲存並同步'}
                                     </button>
                                 </div>
                             </div>
@@ -646,4 +668,3 @@
     </script>
 </body>
 </html>
-                                                
