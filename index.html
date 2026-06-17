@@ -1,669 +1,581 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2026 中歐旅遊管理系統 V15</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026 中歐旅遊管理系統 V15</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+</style>
 </head>
 <body>
-    <div id="root"></div>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef } = React;
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+// ============ 設定區 ============
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyF6XS8S61Baw6DQsj8jGOtgmr5rXZv92mk6INS7uRxP-5bi_FqGqziA9gpr6WZjaG6ng/exec';
 
-        // ============ 設定區 ============
-        // Google Apps Script 部署網址 (請替換成你的)
-        const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyF6XS8S61Baw6DQsj8jGOtgmr5rXZv92mk6INS7uRxP-5bi_FqGqziA9gpr6WZjaG6ng/exec';
+// ============ 安全 localStorage 工具 ============
+const safeStorage = {
+  get: (key, fallback = null) => {
+    try { const v = localStorage.getItem(key); return v !== null ? v : fallback; }
+    catch (e) { return fallback; }
+  },
+  set: (key, value) => {
+    try { localStorage.setItem(key, value); } catch (e) {}
+  }
+};
 
-        // ============ Icon 組件 ============
-        const Icon = ({ name, size = 20, className = "" }) => {
-            const icons = {
-                Plane: "M3 12l3-3 7 7 6-6 3 3-9 9z M12 2l10 10-10 10L2 12z",
-                Plus: "M12 5v14m-7-7h14",
-                Upload: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12",
-                Download: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3",
-                RefreshCw: "M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2",
-                Trash2: "M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6",
-                Edit3: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
-                Save: "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z",
-                X: "M18 6L6 18M6 6l12 12",
-                Wallet: "M21 12V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2v-5m-9 0h7",
-                Check: "M20 6L9 17l-5-5",
-                BarChart3: "M3 3v18h18M8 17V9m4 8V5m4 12v-7",
-                MapPin: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z",
-                Clock: "M12 2a10 10 0 110 20 10 10 0 010-20zm0 5v5l3 3",
-                Camera: "M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2v11z M12 15a3 3 0 100-6 3 3 0 000 6z",
-                Utensils: "M3 2v7c0 1.1.9 2 2 2h2v11h2V11h2c1.1 0 2-.9 2-2V2M16 2v20m3-15v3",
-                CreditCard: "M1 4h22v4H1zm0 8h22v8H1z",
-                Snowflake: "M12 2v20m-8.66-5L12 12m0 0l8.66 5M3.34 7L12 12m0 0l8.66-5",
-                ShoppingBag: "M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6zM3 6h18M16 10a4 4 0 11-8 0",
-                Info: "M12 2a10 10 0 110 20 10 10 0 010-20zm0 7v5m0 3h.01",
-                List: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
-                PieChart: "M21.21 15.89A10 10 0 118 2.83m4-0.83v8h8",
-                ExternalLink: "M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6m4-3h6v6m-11 5L21 3",
-                AlignLeft: "M17 10H3m14 4H3m14 4H3m18-12H3",
-                CheckCircle2: "M12 2a10 10 0 110 20 10 10 0 010-20zm-2 14l-3-3 1.5-1.5L10 13l5.5-5.5L17 9l-7 7z"
-            };
-            return (
-                <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-                    <path d={icons[name] || icons.Info} />
-                </svg>
-            );
-        };
+// ============ Icon 組件 ============
+const Icon = ({ name, size = 20, className = "" }) => {
+  const icons = {
+    Plane: "M3 12l3-3 7 7 6-6 3 3-9 9z M12 2l10 10-10 10L2 12z",
+    Plus: "M12 5v14m-7-7h14",
+    Upload: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12",
+    Download: "M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3",
+    RefreshCw: "M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2",
+    Trash2: "M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6",
+    Edit3: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
+    Save: "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z",
+    X: "M18 6L6 18M6 6l12 12",
+    Wallet: "M21 12V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2v-5m-9 0h7",
+    Check: "M20 6L9 17l-5-5",
+    BarChart3: "M3 3v18h18M8 17V9m4 8V5m4 12v-7",
+    MapPin: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z",
+    Clock: "M12 2a10 10 0 110 20 10 10 0 010-20zm0 5v5l3 3",
+    Camera: "M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2v11z M12 15a3 3 0 100-6 3 3 0 000 6z",
+    Utensils: "M3 2v7c0 1.1.9 2 2 2h2v11h2V11h2c1.1 0 2-.9 2-2V2M16 2v20m3-15v3",
+    CreditCard: "M1 4h22v4H1zm0 8h22v8H1z",
+    Snowflake: "M12 2v20m-8.66-5L12 12m0 0l8.66 5M3.34 7L12 12m0 0l8.66-5",
+    ShoppingBag: "M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4H6zM3 6h18M16 10a4 4 0 11-8 0",
+    Info: "M12 2a10 10 0 110 20 10 10 0 010-20zm0 7v5m0 3h.01",
+    List: "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
+    PieChart: "M21.21 15.89A10 10 0 118 2.83m4-0.83v8h8",
+    ExternalLink: "M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6m4-3h6v6m-11 5L21 3",
+    AlignLeft: "M17 10H3m14 4H3m14 4H3m18-12H3",
+    CheckCircle2: "M12 2a10 10 0 110 20 10 10 0 010-20zm-2 14l-3-3 1.5-1.5L10 13l5.5-5.5L17 9l-7 7z"
+  };
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d={icons[name] || icons.Info} />
+    </svg>
+  );
+};
 
-        // ============ 類別定義 ============
-        const CATEGORIES = [
-            { id: 'transport', label: '交通', icon: 'Plane', color: 'bg-blue-500' },
-            { id: 'accommodation', label: '住宿', icon: 'CreditCard', color: 'bg-indigo-500' },
-            { id: 'food', label: '餐飲', icon: 'Utensils', color: 'bg-orange-500' },
-            { id: 'sightseeing', label: '景點', icon: 'Camera', color: 'bg-emerald-500' },
-            { id: 'ski', label: '滑雪', icon: 'Snowflake', color: 'bg-cyan-500' },
-            { id: 'shopping', label: '購物', icon: 'ShoppingBag', color: 'bg-pink-500' },
-            { id: 'other', label: '其他', icon: 'Info', color: 'bg-slate-500' },
-        ];
+// ============ 類別定義 ============
+const CATEGORIES = [
+  { id: 'transport', label: '交通', icon: 'Plane', color: 'bg-blue-500' },
+  { id: 'accommodation', label: '住宿', icon: 'CreditCard', color: 'bg-indigo-500' },
+  { id: 'food', label: '餐飲', icon: 'Utensils', color: 'bg-orange-500' },
+  { id: 'sightseeing', label: '景點', icon: 'Camera', color: 'bg-emerald-500' },
+  { id: 'ski', label: '滑雪', icon: 'Snowflake', color: 'bg-cyan-500' },
+  { id: 'shopping', label: '購物', icon: 'ShoppingBag', color: 'bg-pink-500' },
+  { id: 'other', label: '其他', icon: 'Info', color: 'bg-slate-500' },
+];
 
-        // ============ 主應用程式 ============
-        function App() {
-            const fileInputRef = useRef(null);
-            
-            // 狀態管理
-            const [activeTab, setActiveTab] = useState('itinerary');
-            const [items, setItems] = useState([]);
-            const [isSyncing, setIsSyncing] = useState(false);
-            const [lastSyncTime, setLastSyncTime] = useState(null);
-            const [syncError, setSyncError] = useState(null);
-            const [selectedDate, setSelectedDate] = useState('2026-02-20');
+// ============ 主應用程式 ============
+function App() {
+  const fileInputRef = useRef(null);
 
-            // 預算管理
-            const [totalBudget, setTotalBudget] = useState(() => {
-                const saved = localStorage.getItem('trip-total-budget');
-                return saved ? parseFloat(saved) : 150000;
-            });
-            const [isEditingBudget, setIsEditingBudget] = useState(false);
-            const [tempBudget, setTempBudget] = useState(totalBudget);
+  const [activeTab, setActiveTab] = useState('itinerary');
+  const [items, setItems] = useState([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState(null);
+  const [syncError, setSyncError] = useState(null);
+  const [selectedDate, setSelectedDate] = useState('2026-02-20');
 
-            // 編輯表單
-            const [isEditing, setIsEditing] = useState(false);
-            const [editingItem, setEditingItem] = useState(null);
-            const [formData, setFormData] = useState({
-                date: '', startTime: '09:00', endTime: '', content: '', location: '',
-                amount: 0, category: 'sightseeing', isPaid: false, link: '', note: ''
-            });
+  // ✅ 修復：安全讀取 localStorage
+  const [totalBudget, setTotalBudget] = useState(() => {
+    const saved = safeStorage.get('trip-total-budget');
+    return saved ? parseFloat(saved) : 150000;
+  });
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [tempBudget, setTempBudget] = useState(totalBudget);
 
-            // ============ Google Sheets 同步函數 ============
-            
-            // 從 Google Sheets 讀取資料
-            const loadFromGoogleSheets = async () => {
-                setIsSyncing(true);
-                setSyncError(null);
-                
-                try {
-                    const response = await fetch(APPS_SCRIPT_URL + '?t=' + Date.now());
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        setItems(result.data || []);
-                        setLastSyncTime(new Date());
-                        
-                        if (result.data && result.data.length > 0 && !items.length) {
-                            setSelectedDate(result.data[0].date);
-                        }
-                    } else {
-                        throw new Error(result.error || '讀取失敗');
-                    }
-                } catch (error) {
-                    console.error('讀取失敗:', error);
-                    setSyncError('讀取失敗: ' + error.message);
-                } finally {
-                    setIsSyncing(false);
-                }
-            };
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [formData, setFormData] = useState({
+    date: '', startTime: '09:00', endTime: '', content: '', location: '',
+    amount: 0, category: 'sightseeing', isPaid: false, link: '', note: ''
+  });
 
-            // 寫入到 Google Sheets (優化版 - 更快速)
-            const saveToGoogleSheets = async (updatedItems) => {
-                // 不顯示同步中狀態,完全背景執行
-                setSyncError(null);
-                
-                try {
-                    // 立即更新本地狀態
-                    setItems(updatedItems);
-                    
-                    // 完全背景同步,不阻塞 UI
-                    fetch(APPS_SCRIPT_URL, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ items: updatedItems })
-                    }).then(() => {
-                        setLastSyncTime(new Date());
-                    }).catch(err => {
-                        console.error('背景同步錯誤:', err);
-                    });
-                    
-                } catch (error) {
-                    console.error('同步失敗:', error);
-                    setSyncError('同步失敗');
-                }
-            };
-
-            // ============ 生命週期 ============
-            
-            // 初始載入
-            useEffect(() => {
-                loadFromGoogleSheets();
-            }, []);
-
-            // 自動同步 (每 30 秒)
-            useEffect(() => {
-                const interval = setInterval(() => {
-                    if (!isSyncing) {
-                        loadFromGoogleSheets();
-                    }
-                }, 30000);
-                
-                return () => clearInterval(interval);
-            }, [isSyncing]);
-
-            // 儲存預算到 localStorage
-            useEffect(() => {
-                localStorage.setItem('trip-total-budget', totalBudget.toString());
-            }, [totalBudget]);
-
-            // ============ 計算屬性 ============
-            
-            const sortedDates = useMemo(() => {
-                return Array.from(new Set(items.map(i => i.date))).sort();
-            }, [items]);
-
-            const filteredItems = useMemo(() => {
-                return items.filter(i => i.date === selectedDate).sort((a, b) => a.startTime.localeCompare(b.startTime));
-            }, [items, selectedDate]);
-
-            const stats = useMemo(() => {
-                const expenseTotal = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
-                const byCategory = CATEGORIES.map(cat => ({
-                    ...cat,
-                    amount: items.filter(i => i.category === cat.id).reduce((sum, i) => sum + (Number(i.amount) || 0), 0)
-                }));
-                return { expenseTotal, byCategory };
-            }, [items]);
-
-            const budgetProgress = useMemo(() => {
-                if (totalBudget <= 0) return 0;
-                return Math.min((stats.expenseTotal / totalBudget) * 100, 100);
-            }, [stats.expenseTotal, totalBudget]);
-
-            // ============ 事件處理 ============
-            
-            const handleOpenEdit = (item = null) => {
-                if (item) {
-                    setEditingItem(item);
-                    setFormData({ ...item });
-                } else {
-                    setEditingItem(null);
-                    setFormData({
-                        date: selectedDate, startTime: '09:00', endTime: '', content: '', location: '',
-                        amount: 0, category: 'sightseeing', isPaid: false, link: '', note: ''
-                    });
-                }
-                setIsEditing(true);
-            };
-
-            const handleSave = () => {
-                if (!formData.date || !formData.startTime || !formData.content) {
-                    alert('請填寫日期、時間和內容名稱');
-                    return;
-                }
-
-                const newItem = {
-                    id: editingItem?.id || 'item_' + Date.now().toString(),
-                    date: formData.date,
-                    startTime: formData.startTime,
-                    endTime: formData.endTime || '',
-                    content: formData.content,
-                    location: formData.location || '',
-                    amount: parseFloat(formData.amount) || 0,
-                    category: formData.category,
-                    isPaid: formData.isPaid,
-                    link: formData.link || '',
-                    note: formData.note || ''
-                };
-
-                let updatedItems;
-                if (editingItem) {
-                    updatedItems = items.map(i => i.id === editingItem.id ? newItem : i);
-                } else {
-                    updatedItems = [...items, newItem];
-                }
-                
-                // 立即關閉表單並更新畫面 (不等待)
-                setIsEditing(false);
-                setSelectedDate(newItem.date);
-                
-                // 完全背景同步
-                saveToGoogleSheets(updatedItems);
-            };
-
-            const handleDelete = (itemId) => {
-                if (!confirm('確定刪除這個行程嗎？')) return;
-                
-                const updatedItems = items.filter(i => i.id !== itemId);
-                
-                // 立即更新畫面 (不等待)
-                setItems(updatedItems);
-                
-                // 完全背景同步
-                saveToGoogleSheets(updatedItems);
-            };
-
-            const handleImportCSV = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    try {
-                        const text = e.target.result;
-                        const lines = text.split('\n');
-                        
-                        const newItems = [];
-                        for (let i = 1; i < lines.length; i++) {
-                            const line = lines[i].trim();
-                            if (!line) continue;
-                            
-                            const values = line.split(',');
-                            const item = {
-                                id: 'csv_' + Date.now().toString() + i,
-                                date: values[0]?.trim() || '',
-                                startTime: values[1]?.trim() || '09:00',
-                                endTime: values[2]?.trim() || '',
-                                content: values[3]?.trim() || '',
-                                location: values[4]?.trim() || '',
-                                amount: parseFloat(values[5]) || 0,
-                                category: values[6]?.trim() || 'other',
-                                isPaid: values[7]?.trim().toUpperCase() === 'TRUE',
-                                link: values[8]?.trim() || '',
-                                note: values[9]?.trim() || ''
-                            };
-                            
-                            if (item.date && item.content) {
-                                newItems.push(item);
-                            }
-                        }
-                        
-                        if (newItems.length > 0) {
-                            const updatedItems = [...items, ...newItems];
-                            
-                            // 立即更新畫面
-                            setItems(updatedItems);
-                            alert('成功匯入 ' + newItems.length + ' 筆行程！');
-                            
-                            // 背景同步
-                            saveToGoogleSheets(updatedItems);
-                        } else {
-                            alert('找不到有效的行程資料');
-                        }
-                    } catch (error) {
-                        alert('匯入失敗，請確認檔案格式正確');
-                        console.error(error);
-                    }
-                };
-                reader.readAsText(file);
-                event.target.value = '';
-            };
-
-            const handleExportCSV = () => {
-                const headers = ['date', 'startTime', 'endTime', 'content', 'location', 'amount', 'category', 'isPaid', 'link', 'note'];
-                const csvLines = [headers.join(',')];
-                
-                items.forEach(item => {
-                    const row = [
-                        item.date,
-                        item.startTime,
-                        item.endTime || '',
-                        item.content,
-                        item.location || '',
-                        item.amount,
-                        item.category,
-                        item.isPaid ? 'TRUE' : 'FALSE',
-                        item.link || '',
-                        item.note || ''
-                    ];
-                    csvLines.push(row.join(','));
-                });
-                
-                const csvContent = csvLines.join('\n');
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = '旅遊行程_' + new Date().toISOString().split('T')[0] + '.csv';
-                link.click();
-            };
-
-            const handleSaveBudget = () => {
-                setTotalBudget(parseFloat(tempBudget) || 0);
-                setIsEditingBudget(false);
-            };
-
-            // ============ 渲染 ============
-            return (
-                <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-32">
-                    {/* 頂部標題列 */}
-                    <header className="bg-white border-b sticky top-0 z-40 px-4 py-5 shadow-sm">
-                        <div className="max-w-xl mx-auto">
-                            <div className="flex justify-between items-center mb-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-blue-600 p-2.5 rounded-2xl text-white shadow-lg">
-                                        <Icon name="Plane" size={24} />
-                                    </div>
-                                    <div>
-                                        <h1 className="font-black text-xl tracking-tight">2026 Central Europe</h1>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Travel Management V15</p>
-                                    </div>
-                                </div>
-                                
-                                {/* 功能按鈕 */}
-                                <div className="flex gap-2">
-                                    <input 
-                                        ref={fileInputRef}
-                                        type="file" 
-                                        accept=".csv" 
-                                        onChange={handleImportCSV}
-                                        style={{display: 'none'}}
-                                    />
-                                    <button 
-                                        onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                                        className="bg-emerald-600 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
-                                        title="匯入 CSV"
-                                    >
-                                        <Icon name="Upload" size={18} />
-                                    </button>
-                                    <button 
-                                        onClick={handleExportCSV}
-                                        className="bg-indigo-600 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
-                                        title="匯出 CSV"
-                                    >
-                                        <Icon name="Download" size={18} />
-                                    </button>
-                                    <button 
-                                        onClick={loadFromGoogleSheets}
-                                        disabled={isSyncing}
-                                        className={`${isSyncing ? 'bg-gray-400' : 'bg-purple-600'} text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg`}
-                                        title="手動同步"
-                                    >
-                                        <Icon name="RefreshCw" size={18} className={isSyncing ? 'animate-spin' : ''} />
-                                    </button>
-                                    <button 
-                                        onClick={() => handleOpenEdit()} 
-                                        className="bg-slate-900 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg"
-                                        title="新增行程"
-                                    >
-                                        <Icon name="Plus" size={18} />
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* 同步狀態列 */}
-                            <div className="mb-3 flex items-center justify-between text-[10px]">
-                                <div className="flex items-center gap-2">
-                                    {isSyncing ? (
-                                        <span className="text-blue-500 font-bold flex items-center gap-1">
-                                            <Icon name="RefreshCw" size={12} className="animate-spin" /> 同步中
-                                        </span>
-                                    ) : lastSyncTime ? (
-                                        <span className="text-green-600 font-bold flex items-center gap-1">
-                                            <Icon name="CheckCircle2" size={12} /> 已同步 {lastSyncTime.toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit'})}
-                                        </span>
-                                    ) : null}
-                                    {syncError && (
-                                        <span className="text-red-500 font-bold text-[9px]">⚠️ {syncError}</span>
-                                    )}
-                                </div>
-                                <span className="text-slate-400 font-bold">📊 {items.length} 筆行程</span>
-                            </div>
-
-                            {/* 預算卡片 */}
-                            <div className="grid grid-cols-2 gap-4 mb-4">
-                                <div className={`p-3 rounded-2xl border transition-all cursor-pointer ${isEditingBudget ? 'bg-white border-blue-500 ring-2 ring-blue-100' : 'bg-slate-50 border-slate-100'}`}
-                                     onClick={() => { if(!isEditingBudget) { setTempBudget(totalBudget); setIsEditingBudget(true); }}}>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">設定預算總額</p>
-                                    {isEditingBudget ? (
-                                        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                                            <span className="font-black text-lg text-blue-600">$</span>
-                                            <input autoFocus type="number" value={tempBudget} 
-                                                   onChange={e => setTempBudget(e.target.value)}
-                                                   onBlur={handleSaveBudget}
-                                                   onKeyDown={e => e.key === 'Enter' && handleSaveBudget()}
-                                                   className="w-full bg-transparent border-none p-0 font-black text-lg text-blue-600" />
-                                        </div>
-                                    ) : (
-                                        <p className="font-black text-lg text-slate-800">${totalBudget.toLocaleString()}</p>
-                                    )}
-                                </div>
-                                <div className="bg-indigo-50 p-3 rounded-2xl border border-indigo-100">
-                                    <p className="text-[10px] font-bold text-indigo-500 uppercase mb-1">目前總支出</p>
-                                    <p className="font-black text-lg text-indigo-700">${stats.expenseTotal.toLocaleString()}</p>
-                                </div>
-                            </div>
-
-                            {/* 預算進度條 */}
-                            <div className="relative w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-1">
-                                <div className={`h-full transition-all duration-700 ${budgetProgress > 90 ? 'bg-red-500' : 'bg-blue-500'}`} style={{width: `${budgetProgress}%`}} />
-                            </div>
-                            <div className="flex justify-between px-1">
-                                <span className="text-[9px] font-black text-slate-400">已支出: {Math.round(budgetProgress)}%</span>
-                                <span className="text-[9px] font-black text-slate-400">剩餘: ${(totalBudget - stats.expenseTotal).toLocaleString()}</span>
-                            </div>
-                        </div>
-                    </header>
-
-                    {/* 主內容區 */}
-                    <main className="max-w-xl mx-auto p-4">
-                        {activeTab === 'itinerary' ? (
-                            <div className="space-y-6">
-                                {/* 日期選擇器 */}
-                                <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
-                                    {sortedDates.map(d => (
-                                        <button key={d} onClick={() => setSelectedDate(d)}
-                                                className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-20 rounded-2xl transition-all ${
-                                                    selectedDate === d ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-slate-400 border'
-                                                }`}>
-                                            <span className="text-[9px] font-black opacity-70 mb-1">DAY</span>
-                                            <span className="text-lg font-black">{d.split('-')[2]}</span>
-                                            <span className="text-[8px] font-bold opacity-60 mt-1">{d.split('-')[1]}月</span>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* 行程卡片列表 */}
-                                <div className="space-y-4">
-                                    {filteredItems.map(item => {
-                                        const category = CATEGORIES.find(c => c.id === item.category);
-                                        return (
-                                            <div key={item.id} className="bg-white rounded-3xl p-5 border shadow-sm">
-                                                <div className="flex gap-4">
-                                                    <div className={`flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center text-white ${category?.color}`}>
-                                                        <Icon name={category?.icon} size={20} />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex justify-between items-start mb-2">
-                                                            <div className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-lg">
-                                                                <Icon name="Clock" size={10} />
-                                                                <span className="text-[10px] font-black text-slate-600">{item.startTime}</span>
-                                                            </div>
-                                                            <div className="flex gap-2">
-                                                                <button 
-                                                                    onClick={() => handleOpenEdit(item)} 
-                                                                    className="text-slate-300 hover:text-blue-500 transition-colors"
-                                                                >
-                                                                    <Icon name="Edit3" size={14} />
-                                                                </button>
-                                                                <button 
-                                                                    onClick={() => handleDelete(item.id)} 
-                                                                    className="text-slate-300 hover:text-red-500 transition-colors"
-                                                                >
-                                                                    <Icon name="Trash2" size={14} />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                        <h3 className="font-bold text-slate-800 mb-1">{item.content}</h3>
-                                                        {item.location && (
-                                                            <a 
-                                                                href={'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(item.location)}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 mb-2 font-medium"
-                                                            >
-                                                                <Icon name="MapPin" size={12} /> {item.location}
-                                                            </a>
-                                                        )}
-                                                        {item.link && (
-                                                            <a href={item.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg mb-3 hover:bg-blue-100 transition-colors">
-                                                                <Icon name="ExternalLink" size={10} /> 相關連結
-                                                            </a>
-                                                        )}
-                                                        {item.note && (
-                                                            <div className="bg-slate-50 rounded-xl p-3 mb-3 border">
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">備註</p>
-                                                                <p className="text-xs text-slate-600">{item.note}</p>
-                                                            </div>
-                                                        )}
-                                                        <div className="flex items-center justify-between pt-3 border-t">
-                                                            <span className="font-black text-slate-700">${item.amount.toLocaleString()}</span>
-                                                            <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.isPaid ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
-                                                                {item.isPaid ? '已付' : '未付'}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="space-y-6 pb-10">
-                                <div className="bg-white rounded-3xl p-6 border shadow-sm">
-                                    <h3 className="font-black text-slate-800 mb-6 flex items-center gap-2">
-                                        <Icon name="BarChart3" size={18} className="text-blue-600" /> 類別支出統計
-                                    </h3>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {stats.byCategory.filter(c => c.amount > 0).map(cat => (
-                                            <div key={cat.id} className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl border">
-                                                <div className={`w-8 h-8 rounded-xl ${cat.color} flex items-center justify-center text-white`}>
-                                                    <Icon name={cat.icon} size={16} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{cat.label}</p>
-                                                    <p className="font-black text-sm">${cat.amount.toLocaleString()}</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </main>
-
-                    {/* 底部導覽列 */}
-                    <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t px-8 py-4 z-50 shadow-lg">
-                        <div className="max-w-xl mx-auto flex justify-between">
-                            <button onClick={() => setActiveTab('itinerary')} className={`flex flex-col items-center gap-1 ${activeTab === 'itinerary' ? 'text-blue-600' : 'text-slate-400'}`}>
-                                <Icon name="List" size={20} />
-                                <span className="text-[10px] font-black uppercase">行程規劃</span>
-                            </button>
-                            <button onClick={() => setActiveTab('budget')} className={`flex flex-col items-center gap-1 ${activeTab === 'budget' ? 'text-blue-600' : 'text-slate-400'}`}>
-                                <Icon name="PieChart" size={20} />
-                                <span className="text-[10px] font-black uppercase">費用分析</span>
-                            </button>
-                        </div>
-                    </nav>
-
-                    {/* 編輯表單 Modal */}
-                    {isEditing && (
-                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-                            <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
-                                <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                                    <h2 className="font-black text-lg">{editingItem ? '編輯行程' : '新增行程'}</h2>
-                                    <button onClick={() => setIsEditing(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-                                        <Icon name="X" size={20} />
-                                    </button>
-                                </div>
-
-                                <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">日期 *</label>
-                                            <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">時間 *</label>
-                                            <input type="time" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold" />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">內容名稱 *</label>
-                                        <input type="text" placeholder="例如:新天鵝堡" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">地點</label>
-                                        <input type="text" placeholder="輸入地點名稱或地址" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold" />
-                                        <p className="text-[9px] text-slate-400 mt-1 ml-1">💡 儲存後會自動產生 Google Maps 連結</p>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">金額</label>
-                                            <input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-black" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">類別</label>
-                                            <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold">
-                                                {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">連結</label>
-                                        <input type="url" placeholder="https://..." value={formData.link} onChange={e => setFormData({...formData, link: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs font-bold" />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">備註</label>
-                                        <textarea rows="3" placeholder="行程備註..." value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs font-bold resize-none"></textarea>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl">
-                                        <input type="checkbox" checked={formData.isPaid} onChange={e => setFormData({...formData, isPaid: e.target.checked})} className="w-4 h-4 rounded text-blue-600" id="paid" />
-                                        <label htmlFor="paid" className="text-xs font-bold text-slate-600 cursor-pointer">標記為已支付</label>
-                                    </div>
-
-                                    <button 
-                                        onClick={handleSave}
-                                        className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2"
-                                    >
-                                        <Icon name="Save" size={18} /> 儲存行程
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
+  // ============ Google Sheets 同步函數 ============
+  const loadFromGoogleSheets = async () => {
+    setIsSyncing(true);
+    setSyncError(null);
+    try {
+      const response = await fetch(APPS_SCRIPT_URL + '?t=' + Date.now());
+      const result = await response.json();
+      if (result.success) {
+        setItems(result.data || []);
+        setLastSyncTime(new Date());
+        if (result.data && result.data.length > 0 && !items.length) {
+          setSelectedDate(result.data[0].date);
         }
+      } else {
+        throw new Error(result.error || '讀取失敗');
+      }
+    } catch (error) {
+      console.error('讀取失敗:', error);
+      setSyncError('讀取失敗: ' + error.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
-        ReactDOM.render(<App />, document.getElementById('root'));
-    </script>
+  const saveToGoogleSheets = async (updatedItems) => {
+    setSyncError(null);
+    try {
+      setItems(updatedItems);
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: updatedItems })
+      }).then(() => {
+        setLastSyncTime(new Date());
+      }).catch(err => {
+        console.error('背景同步錯誤:', err);
+      });
+    } catch (error) {
+      console.error('同步失敗:', error);
+      setSyncError('同步失敗');
+    }
+  };
+
+  // ============ 生命週期 ============
+  useEffect(() => {
+    loadFromGoogleSheets();
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!isSyncing) loadFromGoogleSheets();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isSyncing]);
+
+  // ✅ 修復：安全寫入 localStorage
+  useEffect(() => {
+    safeStorage.set('trip-total-budget', totalBudget.toString());
+  }, [totalBudget]);
+
+  // ============ 計算屬性 ============
+  const sortedDates = useMemo(() => {
+    return Array.from(new Set(items.map(i => i.date))).sort();
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    return items.filter(i => i.date === selectedDate).sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }, [items, selectedDate]);
+
+  const stats = useMemo(() => {
+    const expenseTotal = items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+    const byCategory = CATEGORIES.map(cat => ({
+      ...cat,
+      amount: items.filter(i => i.category === cat.id).reduce((sum, i) => sum + (Number(i.amount) || 0), 0)
+    }));
+    return { expenseTotal, byCategory };
+  }, [items]);
+
+  const budgetProgress = useMemo(() => {
+    if (totalBudget <= 0) return 0;
+    return Math.min((stats.expenseTotal / totalBudget) * 100, 100);
+  }, [stats.expenseTotal, totalBudget]);
+
+  // ============ 事件處理 ============
+  const handleOpenEdit = (item = null) => {
+    if (item) {
+      setEditingItem(item);
+      setFormData({ ...item });
+    } else {
+      setEditingItem(null);
+      setFormData({
+        date: selectedDate, startTime: '09:00', endTime: '', content: '', location: '',
+        amount: 0, category: 'sightseeing', isPaid: false, link: '', note: ''
+      });
+    }
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
+    if (!formData.date || !formData.startTime || !formData.content) {
+      alert('請填寫日期、時間和內容名稱');
+      return;
+    }
+    const newItem = {
+      id: editingItem?.id || 'item_' + Date.now().toString(),
+      date: formData.date,
+      startTime: formData.startTime,
+      endTime: formData.endTime || '',
+      content: formData.content,
+      location: formData.location || '',
+      amount: parseFloat(formData.amount) || 0,
+      category: formData.category,
+      isPaid: formData.isPaid,
+      link: formData.link || '',
+      note: formData.note || ''
+    };
+    let updatedItems;
+    if (editingItem) {
+      updatedItems = items.map(i => i.id === editingItem.id ? newItem : i);
+    } else {
+      updatedItems = [...items, newItem];
+    }
+    setIsEditing(false);
+    setSelectedDate(newItem.date);
+    saveToGoogleSheets(updatedItems);
+  };
+
+  const handleDelete = (itemId) => {
+    if (!confirm('確定刪除這個行程嗎？')) return;
+    const updatedItems = items.filter(i => i.id !== itemId);
+    setItems(updatedItems);
+    saveToGoogleSheets(updatedItems);
+  };
+
+  const handleImportCSV = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const text = e.target.result;
+        const lines = text.split('\n');
+        const newItems = [];
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          const values = line.split(',');
+          const item = {
+            id: 'csv_' + Date.now().toString() + i,
+            date: values[0]?.trim() || '',
+            startTime: values[1]?.trim() || '09:00',
+            endTime: values[2]?.trim() || '',
+            content: values[3]?.trim() || '',
+            location: values[4]?.trim() || '',
+            amount: parseFloat(values[5]) || 0,
+            category: values[6]?.trim() || 'other',
+            isPaid: values[7]?.trim().toUpperCase() === 'TRUE',
+            link: values[8]?.trim() || '',
+            note: values[9]?.trim() || ''
+          };
+          if (item.date && item.content) newItems.push(item);
+        }
+        if (newItems.length > 0) {
+          const updatedItems = [...items, ...newItems];
+          setItems(updatedItems);
+          alert('成功匯入 ' + newItems.length + ' 筆行程！');
+          saveToGoogleSheets(updatedItems);
+        } else {
+          alert('找不到有效的行程資料');
+        }
+      } catch (error) {
+        alert('匯入失敗，請確認檔案格式正確');
+        console.error(error);
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['date', 'startTime', 'endTime', 'content', 'location', 'amount', 'category', 'isPaid', 'link', 'note'];
+    const csvLines = [headers.join(',')];
+    items.forEach(item => {
+      const row = [
+        item.date, item.startTime, item.endTime || '', item.content,
+        item.location || '', item.amount, item.category,
+        item.isPaid ? 'TRUE' : 'FALSE', item.link || '', item.note || ''
+      ];
+      csvLines.push(row.join(','));
+    });
+    const csvContent = csvLines.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = '旅遊行程_' + new Date().toISOString().split('T')[0] + '.csv';
+    link.click();
+  };
+
+  const handleSaveBudget = () => {
+    setTotalBudget(parseFloat(tempBudget) || 0);
+    setIsEditingBudget(false);
+  };
+
+  // ============ 渲染 ============
+  return (
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-32">
+      {/* 頂部標題列 */}
+      <header className="bg-white border-b sticky top-0 z-40 px-4 py-5 shadow-sm">
+        <div className="max-w-xl mx-auto">
+          <div className="flex justify-between items-center mb-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-600 p-2.5 rounded-2xl text-white shadow-lg">
+                <Icon name="Plane" size={24} />
+              </div>
+              <div>
+                <h1 className="font-black text-xl tracking-tight">2026 Central Europe</h1>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Travel Management V15</p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <input ref={fileInputRef} type="file" accept=".csv" onChange={handleImportCSV} style={{display: 'none'}} />
+              <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="bg-emerald-600 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg" title="匯入 CSV">
+                <Icon name="Upload" size={18} />
+              </button>
+              <button onClick={handleExportCSV} className="bg-indigo-600 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg" title="匯出 CSV">
+                <Icon name="Download" size={18} />
+              </button>
+              <button onClick={loadFromGoogleSheets} disabled={isSyncing} className={`${isSyncing ? 'bg-gray-400' : 'bg-purple-600'} text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg`} title="手動同步">
+                <Icon name="RefreshCw" size={18} className={isSyncing ? 'animate-spin' : ''} />
+              </button>
+              <button onClick={() => handleOpenEdit()} className="bg-slate-900 text-white p-3 rounded-full hover:scale-105 transition-transform shadow-lg" title="新增行程">
+                <Icon name="Plus" size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* 同步狀態列 */}
+          <div className="mb-3 flex items-center justify-between text-[10px]">
+            <div className="flex items-center gap-2">
+              {isSyncing ? (
+                <span className="text-blue-500 font-bold flex items-center gap-1">
+                  <Icon name="RefreshCw" size={12} className="animate-spin" /> 同步中
+                </span>
+              ) : lastSyncTime ? (
+                <span className="text-green-600 font-bold flex items-center gap-1">
+                  <Icon name="CheckCircle2" size={12} /> 已同步 {lastSyncTime.toLocaleTimeString('zh-TW', {hour: '2-digit', minute: '2-digit'})}
+                </span>
+              ) : null}
+              {syncError && (
+                <span className="text-red-500 font-bold text-[9px]">⚠️ {syncError}</span>
+              )}
+            </div>
+            <span className="text-slate-400 font-bold">📊 {items.length} 筆行程</span>
+          </div>
+
+          {/* 預算卡片 */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className={`p-3 rounded-2xl border transition-all cursor-pointer ${isEditingBudget ? 'bg-white border-blue-500 ring-2 ring-blue-100' : 'bg-slate-50 border-slate-100'}`}
+              onClick={() => { if(!isEditingBudget) { setTempBudget(totalBudget); setIsEditingBudget(true); }}}>
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">設定預算總額</p>
+              {isEditingBudget ? (
+                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                  <span className="font-black text-lg text-blue-600">$</span>
+                  <input autoFocus type="number" value={tempBudget}
+                    onChange={e => setTempBudget(e.target.value)}
+                    onBlur={handleSaveBudget}
+                    onKeyDown={e => e.key === 'Enter' && handleSaveBudget()}
+                    className="w-full bg-transparent border-none p-0 font-black text-lg text-blue-600" />
+                </div>
+              ) : (
+                <p className="font-black text-lg text-slate-800">${totalBudget.toLocaleString()}</p>
+              )}
+            </div>
+            <div className="bg-indigo-50 p-3 rounded-2xl border border-indigo-100">
+              <p className="text-[10px] font-bold text-indigo-500 uppercase mb-1">目前總支出</p>
+              <p className="font-black text-lg text-indigo-700">${stats.expenseTotal.toLocaleString()}</p>
+            </div>
+          </div>
+
+          {/* 預算進度條 */}
+          <div className="relative w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-1">
+            <div className={`h-full transition-all duration-700 ${budgetProgress > 90 ? 'bg-red-500' : 'bg-blue-500'}`} style={{width: `${budgetProgress}%`}} />
+          </div>
+          <div className="flex justify-between px-1">
+            <span className="text-[9px] font-black text-slate-400">已支出: {Math.round(budgetProgress)}%</span>
+            <span className="text-[9px] font-black text-slate-400">剩餘: ${(totalBudget - stats.expenseTotal).toLocaleString()}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* 主內容區 */}
+      <main className="max-w-xl mx-auto p-4">
+        {activeTab === 'itinerary' ? (
+          <div className="space-y-6">
+            {/* 日期選擇器 */}
+            <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+              {sortedDates.map(d => (
+                <button key={d} onClick={() => setSelectedDate(d)}
+                  className={`flex-shrink-0 flex flex-col items-center justify-center w-14 h-20 rounded-2xl transition-all ${
+                    selectedDate === d ? 'bg-blue-600 text-white shadow-lg' : 'bg-white text-slate-400 border'
+                  }`}>
+                  <span className="text-[9px] font-black opacity-70 mb-1">DAY</span>
+                  <span className="text-lg font-black">{d.split('-')[2]}</span>
+                  <span className="text-[8px] font-bold opacity-60 mt-1">{d.split('-')[1]}月</span>
+                </button>
+              ))}
+            </div>
+
+            {/* 行程卡片列表 */}
+            <div className="space-y-4">
+              {filteredItems.map(item => {
+                const category = CATEGORIES.find(c => c.id === item.category);
+                return (
+                  <div key={item.id} className="bg-white rounded-3xl p-5 border shadow-sm">
+                    <div className="flex gap-4">
+                      <div className={`flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center text-white ${category?.color}`}>
+                        <Icon name={category?.icon} size={20} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-lg">
+                            <Icon name="Clock" size={10} />
+                            <span className="text-[10px] font-black text-slate-600">{item.startTime}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleOpenEdit(item)} className="text-slate-300 hover:text-blue-500 transition-colors">
+                              <Icon name="Edit3" size={14} />
+                            </button>
+                            <button onClick={() => handleDelete(item.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                              <Icon name="Trash2" size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        <h3 className="font-bold text-slate-800 mb-1">{item.content}</h3>
+                        {item.location && (
+                          <a href={'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(item.location)}
+                            target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 text-xs text-blue-500 hover:text-blue-700 mb-2 font-medium">
+                            <Icon name="MapPin" size={12} /> {item.location}
+                          </a>
+                        )}
+                        {item.link && (
+                          <a href={item.link} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded-lg mb-3 hover:bg-blue-100 transition-colors">
+                            <Icon name="ExternalLink" size={10} /> 相關連結
+                          </a>
+                        )}
+                        {item.note && (
+                          <div className="bg-slate-50 rounded-xl p-3 mb-3 border">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">備註</p>
+                            <p className="text-xs text-slate-600">{item.note}</p>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between pt-3 border-t">
+                          <span className="font-black text-slate-700">${item.amount.toLocaleString()}</span>
+                          <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.isPaid ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+                            {item.isPaid ? '已付' : '未付'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6 pb-10">
+            <div className="bg-white rounded-3xl p-6 border shadow-sm">
+              <h3 className="font-black text-slate-800 mb-6 flex items-center gap-2">
+                <Icon name="BarChart3" size={18} className="text-blue-600" /> 類別支出統計
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                {stats.byCategory.filter(c => c.amount > 0).map(cat => (
+                  <div key={cat.id} className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl border">
+                    <div className={`w-8 h-8 rounded-xl ${cat.color} flex items-center justify-center text-white`}>
+                      <Icon name={cat.icon} size={16} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{cat.label}</p>
+                      <p className="font-black text-sm">${cat.amount.toLocaleString()}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* 底部導覽列 */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t px-8 py-4 z-50 shadow-lg">
+        <div className="max-w-xl mx-auto flex justify-between">
+          <button onClick={() => setActiveTab('itinerary')} className={`flex flex-col items-center gap-1 ${activeTab === 'itinerary' ? 'text-blue-600' : 'text-slate-400'}`}>
+            <Icon name="List" size={20} />
+            <span className="text-[10px] font-black uppercase">行程規劃</span>
+          </button>
+          <button onClick={() => setActiveTab('budget')} className={`flex flex-col items-center gap-1 ${activeTab === 'budget' ? 'text-blue-600' : 'text-slate-400'}`}>
+            <Icon name="PieChart" size={20} />
+            <span className="text-[10px] font-black uppercase">費用分析</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* 編輯表單 Modal */}
+      {isEditing && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
+            <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+              <h2 className="font-black text-lg">{editingItem ? '編輯行程' : '新增行程'}</h2>
+              <button onClick={() => setIsEditing(false)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <Icon name="X" size={20} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">日期 *</label>
+                  <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">時間 *</label>
+                  <input type="time" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">內容名稱 *</label>
+                <input type="text" placeholder="例如:新天鵝堡" value={formData.content} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">地點</label>
+                <input type="text" placeholder="輸入地點名稱或地址" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold" />
+                <p className="text-[9px] text-slate-400 mt-1 ml-1">💡 儲存後會自動產生 Google Maps 連結</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">金額</label>
+                  <input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-black" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">類別</label>
+                  <select value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold">
+                    {CATEGORIES.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">連結</label>
+                <input type="url" placeholder="https://..." value={formData.link} onChange={e => setFormData({...formData, link: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs font-bold" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">備註</label>
+                <textarea rows="3" placeholder="行程備註..." value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} className="w-full bg-slate-50 border-none rounded-xl p-3 text-xs font-bold resize-none"></textarea>
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl">
+                <input type="checkbox" checked={formData.isPaid} onChange={e => setFormData({...formData, isPaid: e.target.checked})} className="w-4 h-4 rounded text-blue-600" id="paid" />
+                <label htmlFor="paid" className="text-xs font-bold text-slate-600 cursor-pointer">標記為已支付</label>
+              </div>
+              <button onClick={handleSave} className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl shadow-lg hover:bg-black transition-all flex items-center justify-center gap-2">
+                <Icon name="Save" size={18} /> 儲存行程
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
 </body>
 </html>
